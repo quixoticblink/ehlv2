@@ -3,7 +3,6 @@ import pandas as pd
 import numpy as np
 import requests
 from datetime import datetime, timedelta
-import matplotlib.pyplot as plt
 import plotly.express as px
 
 # Streamlit App Configuration
@@ -15,6 +14,7 @@ st.markdown("""
         .main {background-color: #eef2f7; color: black;}
         .stDataFrame {border-radius: 10px;}
         h1, h2, h3, h4, h5, h6 {color: black;}
+        .dataframe td {white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 300px;}
     </style>
 """, unsafe_allow_html=True)
 
@@ -47,9 +47,18 @@ def get_hotel_data():
         hotels = data.get('data', [])
         df_hotels = pd.DataFrame(hotels)
         if not df_hotels.empty:
-            available_columns = df_hotels.columns.tolist()
-            required_columns = [col for col in ['name', 'address', 'postalCode', 'leadInRoomRate'] if col in available_columns]
-            df_hotels = df_hotels[required_columns]
+            column_map = {
+                'postalCode': 'PIN Code',
+                'leadInRoomRate': 'Price (SGD)',
+                'leadInRoomSize': 'Room Size (sq ft)'
+            }
+            df_hotels = df_hotels.rename(columns={k: v for k, v in column_map.items() if k in df_hotels.columns})
+            selected_columns = ['name']  # Keep hotel name as primary key
+            if 'Price (SGD)' in df_hotels.columns:
+                selected_columns.append('Price (SGD)')
+            if 'Room Size (sq ft)' in df_hotels.columns:
+                selected_columns.append('Room Size (sq ft)')
+            df_hotels = df_hotels[selected_columns]
         return df_hotels
     else:
         st.error(f"Error fetching data: {response.status_code}")
@@ -76,8 +85,8 @@ def adjust_prices_for_events():
             df.loc[df['Date'] == date, 'Base_Price'] *= 1.2  # Ensure type consistency
 
 # Generate base prices
-if 'leadInRoomRate' in hotel_df.columns:
-    df['Base_Price'] = float(hotel_df['leadInRoomRate'].mean())
+if 'Price (SGD)' in hotel_df.columns:
+    df['Base_Price'] = float(hotel_df['Price (SGD)'].mean())
 else:
     df['Base_Price'] = np.random.randint(100, 200, size=len(dates)).astype(float)  # Fallback to random values
 
@@ -103,9 +112,12 @@ st.subheader("💰 Recommended Pricing & Promotions")
 st.dataframe(df[['Date', 'Base_Price', 'Promotion', 'Reason']].style.set_properties(**{'background-color': '#f8f9fa', 'border-color': 'black', 'color': 'black'}))
 
 # Plot price trends with better visuals
-st.subheader("📊 Pricing Trend")
-fig = px.line(df, x='Date', y='Base_Price', title="Recommended Hotel Pricing for March 2025",
+st.subheader("📊 Interactive Pricing Trend")
+fig = px.line(df, x='Date', y=['Base_Price'], title="Hotel Rate vs Recommended Pricing",
               labels={"Base_Price": "Price (SGD)"}, markers=True, line_shape="spline")
+if 'Price (SGD)' in hotel_df.columns:
+    avg_rate = hotel_df['Price (SGD)'].mean()
+    fig.add_scatter(x=df['Date'], y=[avg_rate] * len(df), mode='lines', name='Hotel Avg Rate')
 st.plotly_chart(fig)
 
 # Save the DataFrame to a CSV file for further analysis
