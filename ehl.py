@@ -33,7 +33,11 @@ def get_hotel_data():
     if response.status_code == 200:
         data = response.json()
         hotels = data.get('data', [])
-        return pd.DataFrame(hotels)
+        df_hotels = pd.DataFrame(hotels)
+        
+        if not df_hotels.empty:
+            st.write("Available columns in API response:", df_hotels.columns.tolist())
+        return df_hotels
     else:
         st.error(f"Error fetching data: {response.status_code}")
         return pd.DataFrame()
@@ -41,7 +45,11 @@ def get_hotel_data():
 hotel_df = get_hotel_data()
 if not hotel_df.empty:
     st.subheader("Hotel Summary Data")
-    st.dataframe(hotel_df[['name', 'address', 'leadInRoomRate', 'leadInRoomSize']])
+    display_cols = [col for col in ['name', 'address', 'leadInRoomRate', 'leadInRoomSize'] if col in hotel_df.columns]
+    if display_cols:
+        st.dataframe(hotel_df[display_cols])
+    else:
+        st.write("No matching columns found in the API response.")
 
 # Event-based price adjustments
 event_dates = {
@@ -53,12 +61,17 @@ event_dates = {
 
 def adjust_prices_for_events():
     """Adjusts prices based on upcoming events and expected demand."""
+    df['Base_Price'] = df['Base_Price'].astype(float)
     for event, dates in event_dates.items():
         for date in dates:
-            df.loc[df['Date'] == date, 'Base_Price'] *= 1.2  # Increase by 20%
+            df.loc[df['Date'] == date, 'Base_Price'] *= 1.2  # Ensure type consistency
 
 # Generate base prices
-df['Base_Price'] = hotel_df['leadInRoomRate'].mean() if not hotel_df.empty else np.random.randint(100, 200, size=len(dates))
+if 'leadInRoomRate' in hotel_df.columns:
+    df['Base_Price'] = float(hotel_df['leadInRoomRate'].mean())
+else:
+    df['Base_Price'] = np.random.randint(100, 200, size=len(dates)).astype(float)  # Fallback to random values
+
 adjust_prices_for_events()
 
 def recommend_promotions():
